@@ -57,7 +57,6 @@
                   placeholder="Quantity"></b-form-input>
             <b-form-select id="ingredient_measure"
                           :options="form.measures"
-                          required
                           v-model="form.ingredient_measure_unit">
             </b-form-select>
             
@@ -65,17 +64,23 @@
             
           </b-input-group>
           </b-form-group>
+          <b-form-group id="exampleInputGroup2" >
+              <b-form-input v-model="form.added_ingredients"
+                  type="text" plaintext></b-form-input>
+          </b-form-group>
+          
           <b-button type="submit" variant="primary">Submit</b-button>
           <b-button type="reset" variant="danger">Reset</b-button>
         </b-form>
       </b-card>
     </div>
     <b-table show-empty 
-            responsive
+            striped hover
             :items="recipes" :fields="fields">
-      <template slot="category" slot-scope="data">
-        {{data.name}}
-      </template>        
+       <template slot="actions" slot-scope="data">
+          <b-btn variant="info" v-on:click="addIngredient">Edit</b-btn>
+          <b-btn variant="danger" v-on:click="onDelete(data.item.id)">Delete</b-btn>
+        </template>   
     </b-table>
     
   </div>
@@ -96,51 +101,61 @@ export default {
         measures: ['gr', 'ml', 'cup', 'units'],
         ingredient_description: '',
         ingredient_quantity: 0,
-        ingredient_measure_unit: '' 
+        ingredient_measure_unit: '',
+        added_ingredients: '', 
       },
       categories: [],
       show: true,
-      fields: {
-        id: {
+      fields: [
+        {
+          key: 'id',
           sortable: true
         },
-        name: {
-          label: 'Name',
+        {
+          key: 'name',
           sortable: true
         },
-        description: {
-          label: 'Description'
-        },
-        indications: {
-          key: 'indications'
-        },
-        category: {
+        'indications',
+        {
           key: 'category',
-          label: 'Recipe Category'
+          formatter: 'category_name'
         },
-        ingredients: {
+        {
           key: 'ingredients',
-          label: 'Ingredients'
-        }
-      },
+          formatter: 'ingredients_to_string'
+        },
+        'actions',
+      ],
       recipes: [],
       errors: [],
       ingredients: []
     }
   }, 
   methods: {
+    category_name(value){
+      return `${value.name.charAt(0).toUpperCase() + value.name.slice(1)}`
+    },
+    ingredients_to_string(value){
+      if (value != null) {
+        var ingredients_formatted = ""
+        for (var i = 0; i < value.length; i++) {
+            ingredients_formatted += value[i].description + " - " + value[i].quantity + " " + value[i].measure_unit + ",\n" 
+        }
+        return `${ingredients_formatted}`
+      }
+      return `${"Recipe has no ingredients registered"}`
+    },
     addIngredient (evt) {
       this.ingredients.push({
         description: this.form.ingredient_description,
         quantity: parseInt(this.form.ingredient_quantity, 10),
         measure_unit: this.form.ingredient_measure_unit,
       })
-      this.form.ingredient_description=''
-      this.form.ingredient_quantity=0
-      this.form.ingredient_measure_unit=''
+      this.form.added_ingredients += 
+        this.form.ingredient_description + " - " + this.form.ingredient_quantity + " " + this.form.ingredient_measure_unit + "," 
+      this.clearIngredientForm()
     },
     onSubmit (evt) {
-      alert(JSON.stringify(this.form));
       axios.post('http://localhost:6767/recipes', {
         name: this.form.name,
         description: this.form.description,
@@ -149,46 +164,63 @@ export default {
         ingredients: this.ingredients,
       })
       .then(function (response) {
-        console.log(response);
-        alert("Recipe created")
+        alert("Recipe created");
       })
       .catch(function (error) {
+        console.log(error)
         alert("Recipe can't be created")
-        console.log(error);
       });
+      this.get_recipes();
       evt.preventDefault();
     },
     onReset (evt) {
       evt.preventDefault();
-      /* Reset our form values */
+      this.clearForm();
+      this.$nextTick(() => { this.show = true });
+    },
+    onDelete (recipe_id) {
+      axios.delete('http://localhost:6767/recipes/' + recipe_id)
+      .then(function (response) {
+        alert("Recipe deleted");
+      })
+      .catch(function (error) {
+        console.log(error)
+        alert("Recipe can't be deleted")
+      });
+      this.get_recipes();
+    },
+    clearForm(){
       this.form.name = '';
       this.form.description = '';
       this.form.category = null;
       this.form.indications = '';
-      /* Trick to reset/clear native browser form validation state */
       this.show = false;
       this.recipeCreatedAlert = false;
       this.recipeNoCreatedAlert = false;
-      this.$nextTick(() => { this.show = true });
+      this.form.added_ingredients='';
+      this.clearIngredientForm()  
+    },
+    clearIngredientForm(){
+      this.form.ingredient_description=''
+      this.form.ingredient_quantity=0
+      this.form.ingredient_measure_unit=''
+    },
+    get_recipes(){
+      axios.get(`http://localhost:6767/recipes`)
+      .then(response => {
+        this.recipes = response.data
+      })
+      .catch(e => {
+        console.log(e)
+      })
     }
   },
-
   created() {
-    axios.get(`http://localhost:6767/recipes`)
-    .then(response => {
-      this.recipes = response.data
-    })
-    .catch(e => {
-      this.errors.push(e)
-    })
+    this.get_recipes()  
 
     axios.get(`http://localhost:6767/categories`)
     .then(response => {
       var options = []
-      console.log("data")
-      console.log(response.data)
-      console.log("Length:" + response.data.length)
-      
       for (var i = 0; i < response.data.length; i++) {
           options.push({ value: response.data[i].id, text: response.data[i].name })
       } 
